@@ -307,7 +307,7 @@ class TuyaDevice(pytuya.TuyaListener, pytuya.ContextualLogger):
         self._is_closing = True
         if self._connect_task is not None:
             self._connect_task.cancel()
-            await self._connect_task
+            await asyncio.wait([self._connect_task])
         if self._interface is not None:
             await self._interface.close()
         if self._disconnect_task is not None:
