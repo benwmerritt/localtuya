@@ -35,8 +35,10 @@ def decrypt_udp(message):
 def decode_broadcast(data):
     """Return the JSON text of a 55AA (3.1-3.4) or 6699 (3.5) broadcast."""
     if data[:4] == PREFIX_6699_BIN:
-        message = unpack_message(data, hmac_key=UDP_KEY, no_retcode=True)
-        return message.payload.decode()
+        payload = unpack_message(data, hmac_key=UDP_KEY, no_retcode=True).payload
+        if not payload.startswith(b"{") and payload[4:5] == b"{":
+            payload = payload[4:]
+        return payload.rstrip(b"\x00").decode()
 
     data = data[20:-8]
     try:
@@ -80,7 +82,8 @@ class TuyaDiscovery(asyncio.DatagramProtocol):
         except (DecodeError, UnicodeDecodeError, ValueError) as ex:
             _LOGGER.debug("Ignoring undecodable broadcast from %s: %s", addr, ex)
             return
-        self.device_found(decoded)
+        if isinstance(decoded, dict):
+            self.device_found(decoded)
 
     def device_found(self, device):
         """Discover a new device."""

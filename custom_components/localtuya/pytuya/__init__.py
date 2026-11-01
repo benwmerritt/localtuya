@@ -576,6 +576,9 @@ class MessageDispatcher(ContextualLogger):
                 self.buffer, header=header, hmac_key=hmac_key, logger=self
             )
             self.buffer = self.buffer[header.total_length :]
+            if not msg.crc_good and msg.prefix == PREFIX_6699_VALUE:
+                self.debug("Dropping 6699 message that failed authentication")
+                continue
             self._dispatch(msg)
 
     def _dispatch(self, msg):
