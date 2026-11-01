@@ -12,6 +12,8 @@ from hashlib import md5
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .pytuya import PREFIX_6699_BIN, DecodeError, unpack_message
+
 _LOGGER = logging.getLogger(__name__)
 
 UDP_KEY = md5(b"yGAdlopoPVldABfn").digest()
@@ -28,6 +30,19 @@ def decrypt_udp(message):
     cipher = Cipher(algorithms.AES(UDP_KEY), modes.ECB(), default_backend())
     decryptor = cipher.decryptor()
     return _unpad(decryptor.update(message) + decryptor.finalize()).decode()
+
+
+def decode_broadcast(data):
+    """Return the JSON text of a 55AA (3.1-3.4) or 6699 (3.5) broadcast."""
+    if data[:4] == PREFIX_6699_BIN:
+        message = unpack_message(data, hmac_key=UDP_KEY, no_retcode=True)
+        return message.payload.decode()
+
+    data = data[20:-8]
+    try:
+        return decrypt_udp(data)
+    except Exception:  # pylint: disable=broad-except
+        return data.decode()
 
 
 class TuyaDiscovery(asyncio.DatagramProtocol):
@@ -60,13 +75,11 @@ class TuyaDiscovery(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         """Handle received broadcast message."""
-        data = data[20:-8]
         try:
-            data = decrypt_udp(data)
-        except Exception:  # pylint: disable=broad-except
-            data = data.decode()
-
-        decoded = json.loads(data)
+            decoded = json.loads(decode_broadcast(data))
+        except (DecodeError, UnicodeDecodeError, ValueError) as ex:
+            _LOGGER.debug("Ignoring undecodable broadcast from %s: %s", addr, ex)
+            return
         self.device_found(decoded)
 
     def device_found(self, device):
